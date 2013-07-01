@@ -6,8 +6,11 @@ COMMANDS = 'MmZzLlHhVvCcSsQqTtAa'
 UPPERCASE = 'MZLHVCSQTA'
 
 def _tokenize_path(pathdef):
+    # Avoid separating values like 7e-7 in the next line by tranforming them
+    pathdef = pathdef.replace('e-', 'xe')
     # Commas and minus-signs are separators, just like spaces.
     pathdef = pathdef.replace(',', ' ').replace('-', ' -')
+    pathdef = pathdef.replace('xe', 'e-')
 
     # Commands are allowed without spaces around. Let's insert spaces so it's
     # easier to split later.
