@@ -16,45 +16,6 @@ from drawbot.util import *
 def deg2rad(deg):
 	return math.pi * deg/180
 
-class PygamePainter(object):
-	def __init__(self, ox=0, oy=0):
-		self.ox = ox
-		self.oy = oy
-		self.reset(ox, oy)
-		self.font = pygame.font.Font(None, 12)
-
-	def origin(self, x, y):
-		self.ox = x
-		self.oy = y
-		self.reset(x,y)
-
-	def reset(self, x, y):
-		self.x = x
-		self.y = y
-
-	def drawto(self, x, y, z, screen, color=[0,0,0]):
-		x = self.ox + x
-		y = self.oy + y
-		if z > 0:
-			color = [0,255,0]
-
-		pygame.draw.line(screen, color, [self.x, self.y], [x, y], 1)
-		self.reset(x,y)
-
-	def draw_strings(self, screen, color=[100,100,100]):
-		pass
-
-	def draw_outline_bounds(self, screen, bounds):
-		pass
-
-	def draw_outline(self, screen, x1, y1, x2, y2):
-		pass
-
-	def text(self, text, x, y, screen, color=[0,0,0]):
-		text_surface = self.font.render(text, 1, color)
-		screen.blit(text_surface, (x, y))
-
-
 class DrawBot(object):
 	"""
 	Polar coordinates:
@@ -71,14 +32,12 @@ class DrawBot(object):
 	   	                     (x,y)
 
 	"""
-	def __init__(self, serial):
-		self.ser = serial
-
-		self.distance = 290
+	def __init__(self, distance, initial_alpha, initial_beta):
+		self.distance = distance
+		self.alpha = initial_alpha
+		self.beta  = initial_beta
 
 		# Calculate start position
-		self.alpha = 250
-		self.beta  = 250
 		xxx, yyy = self.polar2xy(self.alpha, self.beta)
 		self.reset(xxx,yyy)
 		self.deltay = yyy
@@ -156,6 +115,13 @@ class DrawBot(object):
 		self.reset(nx,ny)
 
 	def motor_move(self, diffa, diffb, distance):
+		pass
+
+	def motor_init(self):
+		pass
+
+class DrawBotSimulator(object):
+	def motor_move(self, diffa, diffb, distance):
 		# Simulate move:
 		speed = 0.5
 		pygame.time.wait(float2int(distance*speed))
@@ -164,46 +130,55 @@ class DrawBot(object):
 		pass
 
 # -- Simple Serial --
-def send_axis(ser, num):
-	if num < 0:
-		ser.write(chr(1))
-	else:
-		ser.write(chr(0))
-	ser.write(struct.pack("H", abs(float2int(num))))
-
-
-def send_motor_move(ser, m1, m2):
-	if ser is None:
-		#print "No serial, not moving motor"
-		return
-
-	send_axis(ser, m1)
-	send_axis(ser, m2)
-
-	x = ser.read()
-
-	if x != "O":
-		print "Non OK received from motors, something is wrong"
-
-	x = ser.read()
-
-	if x != "K":
-		print "Something is wrong!"
-
-
 class DrawBotSerial(DrawBot):
+	def __init__(self, ser, distance, initial_alpha, initial_beta):
+		self.ser = ser
+		super(DrawBotSerial, self).__init__(distance, initial_alpha, initial_beta)
+
 	def motor_init(self):
 		stepsp = 4096 / (2*math.pi*4)
 		stepsp = 30
 		self.stepsprmm = float2int(stepsp)
+
+	@staticmethod
+	def send_axis(ser, num):
+		if num < 0:
+			ser.write(chr(1))
+		else:
+			ser.write(chr(0))
+		ser.write(struct.pack("H", abs(float2int(num))))
+
+	@staticmethod
+	def send_motor_move(ser, m1, m2):
+		if ser is None:
+			#print "No serial, not moving motor"
+			return
+
+		DrawBotSerial.send_axis(ser, m1)
+		DrawBotSerial.send_axis(ser, m2)
+
+		x = ser.read()
+
+		if x != "O":
+			print "Non OK received from motors, something is wrong"
+
+		x = ser.read()
+
+		if x != "K":
+			print "Something is wrong!"
+
 	def motor_move(self, diffa, diffb, distance):
 		if self.ser is not None:
-			send_motor_move(self.ser, diffa*self.stepsprmm, diffb*self.stepsprmm)
+			DrawBotSerial.send_motor_move(self.ser, diffa*self.stepsprmm, diffb*self.stepsprmm)
 		else:
 			speed = 2
 			pygame.time.wait(float2int(distance*speed))
 
 class DrawBotGcode(DrawBot):
+	def __init__(self, ser, distance, initial_alpha, initial_beta):
+		self.ser = ser
+		super(DrawBotGcode, self).__init__(distance, initial_alpha, initial_beta)
+
 	def send_gcode(self, gcode):
 		print "Gcode", gcode
 		if self.ser:
@@ -267,8 +242,7 @@ def segment_iterator(path):
 			# Move with pen down
 			yield float2int(x*scale), float2int(y*scale), 0
 
-def draw_tour(drawbot, tour, all_paths, screen, background):
-
+def draw_tour(drawbot, tour, all_paths, screen, background, blit=True):
 	for segment_num in tour:
 		if is_done():
 			break
@@ -277,10 +251,11 @@ def draw_tour(drawbot, tour, all_paths, screen, background):
 		for x,y,z in segment_iterator(path):
 			drawbot.drawto(x, y, z, background, [100,100,255])
 
-			screen.blit(background, (0,0))
-			# Draw strings
-			drawbot.draw_strings(screen)
-			pygame.display.flip()
+			if blit:
+				screen.blit(background, (0,0))
+				# Draw strings
+				drawbot.draw_strings(screen)
+				pygame.display.flip()
 
 			if is_done():
 				break
@@ -346,7 +321,7 @@ def main(filename, port):
 	hillclimb_tour = hillclimb_restart_optimize(dist_matrix, path_count, 75000)
 
 	pygame.init()
-	
+
 	size = [1200, 600]
 	screen = pygame.display.set_mode(size)
 	pygame.display.set_caption("DrawBot")
@@ -356,7 +331,10 @@ def main(filename, port):
 	background = pygame.surface.Surface(size)
 	background.fill([255,255,255])
 
-	painter = PygamePainter(100, 100)
+	painter = DrawBot(100,250,250)
+	draw_tour(painter, hillclimb_tour, all_paths, background, background, blit=False)
+	screen.blit(background, (300,0))
+	pygame.display.flip()
 
 	clock = pygame.time.Clock()
 
@@ -368,7 +346,7 @@ def main(filename, port):
 		print "ERROR: Unable to open serial port", port
 		ser = None
 
-	drawbot = DrawBotGcode(ser)
+	drawbot = DrawBotGcode(ser, 100, 250, 250)
 	drawbot.draw_outline_bounds(screen, bounds)
 	drawbot.draw_strings(screen)
 	pygame.display.flip()
