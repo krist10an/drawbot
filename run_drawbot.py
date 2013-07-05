@@ -301,7 +301,7 @@ def main(filename, port):
 
 	print "---- Welcome to DrawBot ----"
 	print "- Parsing SVG", filename
-	svg_image = pysvg.parser.parse(filename)
+	svg_image = pysvg.parser.parse(filename, debug=False)
 	all_paths = get_paths_from_svg(svg_image)
 	# start = complex(200,0)
 	# stop = complex(200,3)

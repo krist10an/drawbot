@@ -23,26 +23,28 @@ def calculateMethodName(attr):
     name='set_'+name
     return name
     
-def setAttributes(attrs,obj):
+def setAttributes(attrs,obj, debug):
     for attr in attrs.keys():
         if hasattr(obj, calculateMethodName(attr)):
             eval ('obj.'+calculateMethodName(attr))(attrs[attr].value)
         else:
-            print calculateMethodName(attr)+' not found in:'+obj._elementName
+            if debug:
+                print calculateMethodName(attr)+' not found in:'+obj._elementName
         
-def build(node_, object):
+def build(node_, object, debug):
     attrs = node_.attributes
     if attrs != None:
-        setAttributes(attrs, object)
+        setAttributes(attrs, object, debug)
     for child_ in node_.childNodes:
         nodeName_ = child_.nodeName.split(':')[-1]
         if child_.nodeType == Node.ELEMENT_NODE:
             try:
                 objectinstance=eval(nodeName_) ()                
             except:
-                print 'no class for: '+nodeName_
+                if debug:
+                    print 'no class for: '+nodeName_
                 continue
-            object.addElement(build(child_,objectinstance))
+            object.addElement(build(child_,objectinstance,debug))
         elif child_.nodeType == Node.TEXT_NODE:
             #print "TextNode:"+child_.nodeValue
             #if child_.nodeValue.startswith('\n'):
@@ -57,15 +59,16 @@ def build(node_, object):
         elif child_.nodeType == Node.COMMENT_NODE:  
             object.appendTextContent('<!-- '+child_.nodeValue+' -->')          
         else:
-            print "Some node:"+nodeName_+" value: "+child_.nodeValue
+            if debug:
+                print "Some node:"+nodeName_+" value: "+child_.nodeValue
     return object
 
 #TODO: packageprefix ?
-def parse(inFileName):
+def parse(inFileName, debug=False):
     doc = minidom.parse(inFileName)
     rootNode = doc.documentElement
     rootObj = svg()
-    build(rootNode,rootObj)
+    build(rootNode,rootObj, debug)
     # Enable Python to collect the space used by the DOM.
     doc = None
     #print rootObj.getXML()
