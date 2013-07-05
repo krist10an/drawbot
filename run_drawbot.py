@@ -39,7 +39,7 @@ class DrawBot(object):
 
 		# Calculate start position
 		xxx, yyy = self.polar2xy(self.alpha, self.beta)
-		self.reset(xxx,yyy)
+		self.reset(xxx, yyy)
 		self.deltay = yyy
 		print " * Start position values x,y=%f,%f a=%f,b=%f" % (self.x, self.y, self.alpha, self.beta)
 		self.display_x_offset = 300
@@ -88,11 +88,11 @@ class DrawBot(object):
 		# Draw Origo
 		oa, ob = self.xy2polar(0, 0)
 		ox, oy = self.polar2xy(oa, ob)
-		pygame.draw.circle(screen, [255,0,0], (self.display_x_offset+ox,oy), 5)
+		pygame.draw.circle(screen, [255, 0, 0], (self.display_x_offset+ox, oy), 5)
 
-	def drawto(self, x, y, z, screen, color=[0,255,0]):
+	def drawto(self, x, y, z, screen, color=[0, 255, 0]):
 		alpha, beta = self.xy2polar(x, y)
-		
+
 		diffa = alpha - self.alpha
 		diffb = beta - self.beta
 
@@ -101,18 +101,21 @@ class DrawBot(object):
 		self.distance_drawn += distance
 
 		if z > 0:
-			color = [0, 255,0]
+			color = [0, 255, 0]
 
 		# Draw line
 		pygame.draw.line(screen, color, [self.display_x_offset + self.x, self.y], [self.display_x_offset + nx, ny], 1)
 
-		print "Move to x = %3d y=%3d A=%#3.1f + %.1f\t B=%3.1f + %.1f" % (x,y,alpha,diffa,beta,diffb)
+		self.debug_move(x, y, alpha, diffa, beta, diffb)
 		self.motor_move(diffa, diffb, distance)
 
 		# Update  current position
 		self.alpha = alpha
 		self.beta  = beta
-		self.reset(nx,ny)
+		self.reset(nx, ny)
+
+	def debug_move(self, x, y, alpha, diffa, beta, diffb):
+		pass
 
 	def motor_move(self, diffa, diffb, distance):
 		pass
@@ -120,7 +123,10 @@ class DrawBot(object):
 	def motor_init(self):
 		pass
 
-class DrawBotSimulator(object):
+class DrawBotSimulator(DrawBot):
+	def debug_move(self, x, y, alpha, diffa, beta, diffb):
+		print "Move to x = %3d y=%3d A=%#3.1f + %.1f\t B=%3.1f + %.1f" % (x, y, alpha, diffa, beta, diffb)
+
 	def motor_move(self, diffa, diffb, distance):
 		# Simulate move:
 		speed = 0.5
@@ -130,14 +136,13 @@ class DrawBotSimulator(object):
 		pass
 
 # -- Simple Serial --
-class DrawBotSerial(DrawBot):
+class DrawBotSerial(DrawBotSimulator):
 	def __init__(self, ser, distance, initial_alpha, initial_beta):
 		self.ser = ser
 		super(DrawBotSerial, self).__init__(distance, initial_alpha, initial_beta)
 
 	def motor_init(self):
 		stepsp = 4096 / (2*math.pi*4)
-		stepsp = 30
 		self.stepsprmm = float2int(stepsp)
 
 	@staticmethod
@@ -174,7 +179,7 @@ class DrawBotSerial(DrawBot):
 			speed = 2
 			pygame.time.wait(float2int(distance*speed))
 
-class DrawBotGcode(DrawBot):
+class DrawBotGcode(DrawBotSimulator):
 	def __init__(self, ser, distance, initial_alpha, initial_beta):
 		self.ser = ser
 		super(DrawBotGcode, self).__init__(distance, initial_alpha, initial_beta)
@@ -233,7 +238,7 @@ def segment_iterator(path):
 		else:
 			iterations = 5
 
-		points = [segment.point(float(x)/iterations) for x in range(0,iterations+1)]
+		points = [segment.point(float(x)/iterations) for x in range(0, iterations+1)]
 		x, y = im2xy(points[0])
 		# Move with pen up
 		yield float2int(x*scale), float2int(y*scale), 1
@@ -270,7 +275,6 @@ def navigate_to_start(bot, clock):
 	while not start and not is_done():
 		clock.tick(60)
 
-		pressed = False
 		keystate = pygame.key.get_pressed()
 		dist = 10
 		mx = 0
@@ -318,23 +322,24 @@ def main(filename, port):
 	dist_matrix = calc_dist_matrix(all_paths)
 
 	print "- Optimizing"
-	hillclimb_tour = hillclimb_restart_optimize(dist_matrix, path_count, 75000)
+	optimized_tour = hillclimb_restart_optimize(dist_matrix, path_count, 75000)
 
 	pygame.init()
 
 	size = [1200, 600]
 	screen = pygame.display.set_mode(size)
 	pygame.display.set_caption("DrawBot")
-	screen.fill([255,255,255])
+	screen.fill([255, 255, 255])
 	pygame.display.flip()
 
 	background = pygame.surface.Surface(size)
-	background.fill([255,255,255])
+	background.fill([255, 255, 255])
 
-	painter = DrawBot(100,250,250)
-	draw_tour(painter, hillclimb_tour, all_paths, background, background, blit=False)
-	screen.blit(background, (300,0))
+	painter = DrawBot(100, 250, 250)
+	draw_tour(painter, optimized_tour, all_paths, background, background, blit=False)
+	screen.blit(background, (300, 0))
 	pygame.display.flip()
+	background.fill([255, 255, 255])
 
 	clock = pygame.time.Clock()
 
@@ -353,16 +358,16 @@ def main(filename, port):
 
 	navigate_to_start(drawbot, clock)
 
-	screen.fill([255,255,255])
+	screen.fill([255, 255, 255])
 	drawbot.draw_outline_bounds(background, bounds)
 
-	draw_tour(drawbot, hillclimb_tour, all_paths, screen, background)
+	draw_tour(drawbot, optimized_tour, all_paths, screen, background)
 
 	if done:
 		print "Aborted"
 	else:
 		print "Drawing completed."
-		print "Distance moved:",drawbot.distance_drawn
+		print "Distance moved:", drawbot.distance_drawn
 
 	while not is_done():
 		# This limits the while loop to a max of 10 times per second.
@@ -376,7 +381,7 @@ if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(description='Run DrawBot.')
 	parser.add_argument('filename', metavar='filename', type=str, help='SVG file to use as input')
-	parser.add_argument('-p', '--port', dest='port', type=int, action='store',default=None,help='COM port to use')
+	parser.add_argument('-p', '--port', dest='port', type=int, action='store', default=None, help='COM port to use')
 
 	args = parser.parse_args()
 
