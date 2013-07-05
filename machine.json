@@ -1,0 +1,7 @@
+{
+	"name" : "Example",
+	"type" : "gcode",
+	"distance" : 100,
+	"alpha" : 250,
+	"beta" : 250
+}

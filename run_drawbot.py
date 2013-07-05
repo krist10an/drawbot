@@ -294,10 +294,11 @@ def navigate_to_start(bot, clock):
 			print "Move", mx, my
 			bot.motor_move(mx, my, 0)
 
-def main(filename, port):
+def main(filename, port, m_type, m_distance, m_initial_alpha, m_initial_beta, max_size):
 	global scale
 
-	max_size = 100.0 # mm
+	if max_size is None:
+		max_size = m_distance * 0.8
 
 	print "---- Welcome to DrawBot ----"
 	print "- Parsing SVG", filename
@@ -335,7 +336,7 @@ def main(filename, port):
 	background = pygame.surface.Surface(size)
 	background.fill([255, 255, 255])
 
-	painter = DrawBot(100, 250, 250)
+	painter = DrawBot(m_distance, m_initial_alpha, m_initial_beta)
 	draw_tour(painter, optimized_tour, all_paths, background, background, blit=False)
 	screen.blit(background, (300, 0))
 	pygame.display.flip()
@@ -351,7 +352,12 @@ def main(filename, port):
 		print "ERROR: Unable to open serial port", port
 		ser = None
 
-	drawbot = DrawBotGcode(ser, 100, 250, 250)
+	if m_type == "serial":
+		drawbot = DrawBotSerial(ser, m_distance, m_initial_alpha, m_initial_beta)
+	elif m_type == "gcode":
+		drawbot = DrawBotGcode(ser, m_distance, m_initial_alpha, m_initial_beta)
+	else:
+		raise Exception("Unkown machine type" + m_type)
 	drawbot.draw_outline_bounds(screen, bounds)
 	drawbot.draw_strings(screen)
 	pygame.display.flip()
@@ -378,11 +384,25 @@ def main(filename, port):
 
 if __name__ == "__main__":
 	import argparse
+	import json
 
 	parser = argparse.ArgumentParser(description='Run DrawBot.')
+	parser.add_argument('machine', metavar='machine', type=str, help='Machine description JSON')
 	parser.add_argument('filename', metavar='filename', type=str, help='SVG file to use as input')
 	parser.add_argument('-p', '--port', dest='port', type=int, action='store', default=None, help='COM port to use')
+	parser.add_argument('-s', '--size', dest='size', type=float, action='store', default=None, help='Output size (mm)')
 
 	args = parser.parse_args()
+	try:
+		cstr = open(args.machine).read()
+	except IOError:
+		print "Unable to open machine file", args.machine
+		sys.exit(1)
 
-	main(args.filename, args.port)
+	config = json.loads(cstr)
+	_type = config["type"]
+	_distance = config["distance"]
+	_alpha = config["alpha"]
+	_beta = config["beta"]
+
+	main(args.filename, args.port, _type, _distance, _alpha, _beta, args.size)
